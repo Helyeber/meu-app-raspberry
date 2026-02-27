@@ -12,7 +12,7 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
       
-      - name: Configurar QEMU (CORRIGIDO)
+      - name: Configurar QEMU
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm32v7
@@ -20,30 +20,42 @@ jobs:
       - name: Verificar configuração
         run: |
           docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-          docker info
       
-      - name: Compilar para ARMv7 (Método Alternativo)
+      - name: Compilar para ARMv7 (CORRIGIDO)
         run: |
-          # Usando imagem multiarch com suporte explícito
           docker run --rm \
             --platform linux/arm/v7 \
             -v $PWD:/workspace \
             -w /workspace \
             arm32v7/python:3.9-slim \
             /bin/bash -c "
-              echo '=== INSTALANDO DEPENDÊNCIAS ===' &&
+              echo '=== ATUALIZANDO REPOSITÓRIOS ===' &&
               apt-get update &&
-              apt-get install -y gcc freetds-dev &&
-
+              
+              echo '=== INSTALANDO DEPENDÊNCIAS DE COMPILAÇÃO ===' &&
+              apt-get install -y \
+                gcc \
+                freetds-dev \
+                zlib1g-dev \
+                libssl-dev \
+                pkg-config \
+                make \
+                libffi-dev \
+                python3-dev &&
+              
               echo '=== INSTALANDO PACOTES PYTHON ===' &&
-              pip install --upgrade pip &&
+              pip install --upgrade pip setuptools wheel &&
               pip install pyinstaller pymssql &&
-
+              
               echo '=== COMPILANDO APLICAÇÃO ===' &&
-              pyinstaller --onefile --name app_raspberry app.py &&
-
+              pyinstaller --onefile \
+                --name app_raspberry \
+                --clean \
+                app.py &&
+              
               echo '=== VERIFICANDO ARQUIVO GERADO ===' &&
-              ls -la dist/
+              ls -la dist/ &&
+              file dist/app_raspberry
             "
       
       - name: Upload do executável
