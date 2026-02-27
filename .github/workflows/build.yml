@@ -1,0 +1,31 @@
+name: Compilar para Raspberry Pi
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configurar QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Compilar para ARMv7
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace arm32v7/python:3.9-slim bash -c "
+            apt-get update &&
+            apt-get install -y gcc freetds-dev &&
+            pip install --upgrade pip &&
+            pip install -r requirements.txt &&
+            pyinstaller --onefile --name app_raspberry app.py
+          "
+      
+      - name: Upload executável
+        uses: actions/upload-artifact@v4
+        with:
+          name: executavel-raspberry
+          path: dist/app_raspberry
