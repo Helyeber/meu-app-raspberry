@@ -1,4 +1,4 @@
-name: Compilar para Raspberry Pi
+name: Compilar para Raspberry Pi (GLIBC 2.28)
 
 on:
   push:
@@ -14,43 +14,62 @@ jobs:
       - name: Configurar QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm
+          platforms: arm32v7
       
-      - name: Compilar com Debian Bullseye
+      - name: Compilar com Debian Buster (GLIBC 2.28)
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
             -v $PWD:/workspace \
             -w /workspace \
-            arm32v7/debian:bullseye-slim \
+            arm32v7/debian:buster-slim \
             bash -c "
-              # Configurar repositórios atualizados
-              echo 'deb http://deb.debian.org/debian bullseye main contrib non-free' > /etc/apt/sources.list &&
-              echo 'deb http://deb.debian.org/debian-security bullseye-security main contrib non-free' >> /etc/apt/sources.list &&
-              echo 'deb http://deb.debian.org/debian bullseye-updates main contrib non-free' >> /etc/apt/sources.list &&
+              # Configurar repositórios do archive.debian.org (Buster)
+              echo 'deb http://archive.debian.org/debian buster main contrib non-free' > /etc/apt/sources.list &&
+              echo 'deb http://archive.debian.org/debian-security buster/updates main contrib non-free' >> /etc/apt/sources.list &&
               
-              # Atualizar e instalar dependências
-              apt-get update &&
+              # Atualizar lista de pacotes
+              apt-get update -o Acquire::Check-Valid-Until=false &&
+              
+              # Instalar dependências de compilação
               apt-get install -y \
                 python3 \
                 python3-pip \
+                python3-dev \
                 gcc \
                 freetds-dev \
                 zlib1g-dev \
                 libssl-dev \
                 libkrb5-dev \
-                && rm -rf /var/lib/apt/lists/* &&
+                pkg-config \
+                && apt-get clean &&
+              
+              # Verificar versão do GLIBC (deve ser 2.28)
+              echo '=== VERIFICANDO GLIBC ===' &&
+              ldd --version | head -n1 &&
               
               # Instalar pacotes Python
+              echo '=== INSTALANDO PACOTES PYTHON ===' &&
               pip3 install --upgrade pip setuptools wheel &&
               pip3 install pyinstaller pymssql &&
               
-              # Compilar
-              pyinstaller --onefile --name app_raspberry app.py
+              # Compilar com flags para garantir compatibilidade
+              echo '=== COMPILANDO APLICAÇÃO ===' &&
+              pyinstaller --onefile \
+                --clean \
+                --name app_raspberry \
+                --hidden-import pymssql \
+                --hidden-import _mssql \
+                app.py &&
+              
+              # Verificar GLIBC requerida
+              echo '=== GLIBC REQUERIDA PELO EXECUTÁVEL ===' &&
+              readelf -V dist/app_raspberry | grep GLIBC_2 || true
             "
       
-      - name: Upload
+      - name: Upload executável
         uses: actions/upload-artifact@v4
         with:
-          name: executavel-raspberry
+          name: app_raspberry-glibc228
           path: dist/app_raspberry
+          if-no-files-found: error
