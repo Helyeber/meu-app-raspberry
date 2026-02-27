@@ -14,24 +14,28 @@ jobs:
       - name: Configurar QEMU
         uses: docker/setup-qemu-action@v3
       
-      - name: Compilar com drivers alternativos
+      - name: Compilar com imagem completa
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
             -v $PWD:/workspace \
             -w /workspace \
-            arm32v7/python:3.9-slim \
+            arm32v7/python:3.9-buster \
             bash -c "
               apt-get update &&
-              apt-get install -y gcc &&  # Só precisa disso!
+              apt-get install -y \
+                gcc \
+                freetds-dev \
+                freetds-bin \
+                zlib1g-dev \
+                libssl-dev \
+                libkrb5-dev \
+                krb5-user \
+                && apt-get clean &&
               
               pip install --upgrade pip setuptools wheel &&
-              # Instalar drivers pure Python (sem dependências complicadas)
-              pip install pyinstaller pymysql mssql-cli &&
+              pip install pyinstaller pymssql &&
               
-              # Para SQL Server, podemos usar sqlalchemy + pymssql ou
-              # uma abordagem diferente
-              echo '=== COMPILANDO APLICAÇÃO ===' &&
               pyinstaller --onefile --name app_raspberry app.py
             "
       
