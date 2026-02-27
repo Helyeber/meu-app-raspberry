@@ -9,23 +9,47 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout do código
+        uses: actions/checkout@v4
       
-      - name: Configurar QEMU
+      - name: Configurar QEMU (CORRIGIDO)
         uses: docker/setup-qemu-action@v3
-      
-      - name: Compilar para ARMv7
-        run: |
-          docker run --rm -v $PWD:/workspace -w /workspace arm32v7/python:3.9-slim bash -c "
-            apt-get update &&
-            apt-get install -y gcc freetds-dev &&
-            pip install --upgrade pip &&
-            pip install -r requirements.txt &&
-            pyinstaller --onefile --name app_raspberry app.py
-          "
-      
-      - name: Upload executável
-        uses: actions/upload-artifact@v4
         with:
-          name: executavel-raspberry
+          platforms: arm32v7
+      
+      - name: Verificar configuração
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          docker info
+      
+      - name: Compilar para ARMv7 (Método Alternativo)
+        run: |
+          # Usando imagem multiarch com suporte explícito
+          docker run --rm \
+            --platform linux/arm/v7 \
+            -v $PWD:/workspace \
+            -w /workspace \
+            arm32v7/python:3.9-slim \
+            /bin/bash -c "
+              echo '=== INSTALANDO DEPENDÊNCIAS ===' &&
+              apt-get update &&
+              apt-get install -y gcc freetds-dev &&
+
+              echo '=== INSTALANDO PACOTES PYTHON ===' &&
+              pip install --upgrade pip &&
+              pip install pyinstaller pymssql &&
+
+              echo '=== COMPILANDO APLICAÇÃO ===' &&
+              pyinstaller --onefile --name app_raspberry app.py &&
+
+              echo '=== VERIFICANDO ARQUIVO GERADO ===' &&
+              ls -la dist/
+            "
+      
+      - name: Upload do executável
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: executavel-raspberry-armv7
           path: dist/app_raspberry
+          retention-days: 5
