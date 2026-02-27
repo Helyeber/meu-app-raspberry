@@ -9,38 +9,92 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout do código
+        uses: actions/checkout@v4
       
       - name: Configurar QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm32v7
       
-      - name: Compilar com imagem completa
+      - name: Compilar com todas as dependências
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
             -v $PWD:/workspace \
             -w /workspace \
-            arm32v7/python:3.9-buster \
-            bash -c "
+            arm32v7/python:3.9-slim \
+            /bin/bash -c "
+              echo '=== ATUALIZANDO REPOSITÓRIOS ===' &&
               apt-get update &&
+              
+              echo '=== INSTALANDO TODAS AS DEPENDÊNCIAS ===' &&
               apt-get install -y \
                 gcc \
                 freetds-dev \
                 freetds-bin \
                 zlib1g-dev \
                 libssl-dev \
+                pkg-config \
+                make \
+                libffi-dev \
+                python3-dev \
                 libkrb5-dev \
+                krb5-multidev \
+                libgssapi-krb5-2 \
+                libgssrpc4 \
+                libkadm5srv-mit11 \
+                libkadm5clnt-mit11 \
+                libk5crypto3 \
+                libkrb5support0 \
+                libkrb5-3 \
                 krb5-user \
-                && apt-get clean &&
+                libsybdb5 \
+                wget \
+                && apt-get clean
               
-              pip install --upgrade pip setuptools wheel &&
-              pip install pyinstaller pymssql &&
+              echo '=== VERIFICANDO BIBLIOTECAS KERBEROS ===' &&
+              ls -la /usr/lib/arm-linux-gnueabihf/ | grep krb5 &&
               
-              pyinstaller --onefile --name app_raspberry app.py
+              echo '=== CRIANDO LINKS SIMBÓLICOS (se necessário) ===' &&
+              # Garantir que o linker encontre as bibliotecas
+              ldconfig &&
+              
+              echo '=== INSTALANDO FERRAMENTAS DE BUILD ===' &&
+              pip install --upgrade pip setuptools wheel cython &&
+              
+              echo '=== INSTALANDO pymssql PRIMEIRO (para testar) ===' &&
+              # Tentar instalar pymssql com flags específicas
+              pip install --no-cache-dir \
+                --global-option=build_ext \
+                --global-option="--include-dirs=/usr/include" \
+                --global-option="--library-dirs=/usr/lib/arm-linux-gnueabihf" \
+                pymssql ||
+              (echo 'Falha na primeira tentativa, tentando método alternativo...' && 
+               export CFLAGS=\"-I/usr/include\" && 
+               export LDFLAGS=\"-L/usr/lib/arm-linux-gnueabihf\" && 
+               pip install --no-cache-dir pymssql) &&
+              
+              echo '=== INSTALANDO PYINSTALLER ===' &&
+              pip install pyinstaller &&
+              
+              echo '=== COMPILANDO APLICAÇÃO ===' &&
+              pyinstaller --onefile \
+                --name app_raspberry \
+                --clean \
+                --hidden-import pymssql \
+                --hidden-import _mssql \
+                app.py &&
+              
+              echo '=== VERIFICANDO ARQUIVO GERADO ===' &&
+              ls -la dist/ &&
+              file dist/app_raspberry
             "
       
-      - name: Upload
+      - name: Upload do executável
         uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: executavel-raspberry
+          name: executavel-raspberry-armv7
           path: dist/app_raspberry
+          retention-days: 5
