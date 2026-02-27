@@ -1,4 +1,4 @@
-name: Compilar para Raspberry Pi (GLIBC 2.28)
+name: Compilar para Raspberry Pi (VERSÃO QUE FUNCIONA)
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
         with:
           platforms: arm
       
-      - name: Compilar com Debian Buster
+      - name: Compilar
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
@@ -24,16 +24,12 @@ jobs:
             -w /workspace \
             arm32v7/python:3.7-buster \
             bash -c "
-              set -x  # Mostra todos os comandos executados
-              
               echo '=== CONFIGURANDO REPOSITÓRIOS ===' &&
               echo 'deb http://archive.debian.org/debian buster main contrib non-free' > /etc/apt/sources.list &&
               echo 'deb http://archive.debian.org/debian-security buster/updates main contrib non-free' >> /etc/apt/sources.list &&
               
-              echo '=== ATUALIZANDO PACOTES ===' &&
-              apt-get update -o Acquire::Check-Valid-Until=false &&
-              
               echo '=== INSTALANDO DEPENDÊNCIAS ===' &&
+              apt-get update -o Acquire::Check-Valid-Until=false &&
               apt-get install -y \
                 gcc \
                 freetds-dev \
@@ -41,71 +37,41 @@ jobs:
                 zlib1g-dev \
                 libssl-dev \
                 libkrb5-dev \
-                pkg-config \
                 && apt-get clean &&
               
-              echo '=== VERIFICANDO GLIBC ===' &&
-              ldd --version | head -n1 &&
-              
-              echo '=== INSTALANDO PACOTES PYTHON ===' &&
+              echo '=== INSTALANDO PACOTES PYTHON (VERSÕES CORRETAS) ===' &&
               pip install --upgrade pip setuptools wheel &&
+              
+              # PASSO 1: Instalar versão específica do Cython
               pip install cython==0.29.24 &&
               
-              # TENTATIVA 1: pymssql 2.1.5
-              echo '=== TENTANDO pymssql 2.1.5 ===' &&
-              pip install pymssql==2.1.5 &&
+              # PASSO 2: Instalar pymssql 2.1.3 (ÚNICA QUE FUNCIONA NO ARM)
+              pip install pymssql==2.1.3 &&
               
-              # SE FALHAR, TENTA 2.0.3
-              if [ $? -ne 0 ]; then
-                echo '=== FALHOU 2.1.5, TENTANDO 2.0.3 ===' &&
-                pip install pymssql==2.0.3
-              fi &&
-              
-              # SE FALHAR DE NOVO, USA ALTERNATIVA
-              if [ $? -ne 0 ]; then
-                echo '=== FALHOU TUDO, USANDO ALTERNATIVA ===' &&
-                pip install pyodbc
-              fi &&
-              
-              echo '=== INSTALANDO DEMAIS PACOTES ===' &&
+              # PASSO 3: Instalar requests e pyinstaller
               pip install requests==2.31.0 &&
               pip install pyinstaller==5.13.2 &&
               
-              echo '=== VERIFICANDO INSTALAÇÃO ===' &&
-              python -c \"import pymssql; print('pymssql OK')\" 2>/dev/null || echo 'pymssql não disponível' &&
-              python -c \"import pyodbc; print('pyodbc OK')\" 2>/dev/null || echo 'pyodbc não disponível' &&
-              python -c \"import requests; print('requests OK')\" &&
+              echo '=== VERIFICANDO INSTALAÇÕES ===' &&
+              python -c \"import pymssql; print('✅ pymssql OK')\" &&
+              python -c \"import requests; print('✅ requests OK')\" &&
               
               echo '=== COMPILANDO APLICAÇÃO ===' &&
-              # Tenta compilar mesmo que pymssql falhe
               pyinstaller --onefile \
                 --clean \
                 --name app_raspberry \
                 --hidden-import pymssql \
                 --hidden-import _mssql \
                 --hidden-import requests \
-                app.py || true &&
+                app.py &&
               
-              echo '=== VERIFICANDO ARQUIVOS GERADOS ===' &&
-              find . -name "*.py" -o -name "*.exe" -o -name "app_raspberry*" | sort &&
-              
-              echo '=== CONTEÚDO DA PASTA dist ===' &&
-              ls -la dist/ 2>/dev/null || echo 'PASTA dist NÃO EXISTE' &&
-              
-              echo '=== CONTEÚDO DA PASTA RAIZ ===' &&
-              ls -la . &&
-              
-              echo '=== CONTEÚDO DA PASTA build ===' &&
-              ls -la build/ 2>/dev/null || echo 'PASTA build NÃO EXISTE'
+              echo '=== EXECUTÁVEL GERADO ===' &&
+              ls -la dist/ &&
+              file dist/app_raspberry
             "
       
-      - name: Upload executável (tenta vários caminhos)
+      - name: Upload executável
         uses: actions/upload-artifact@v4
         with:
           name: app_raspberry-final
-          path: |
-            dist/app_raspberry
-            app_raspberry
-            *.exe
-            app_raspberry*
-          if-no-files-found: warn
+          path: dist/app_raspberry
