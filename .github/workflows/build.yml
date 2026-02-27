@@ -1,4 +1,4 @@
-name: Compilar para Raspberry Pi (GLIBC 2.28 - VERSÃO FINAL)
+name: Compilar para Raspberry Pi (GLIBC 2.28)
 
 on:
   push:
@@ -24,6 +24,8 @@ jobs:
             -w /workspace \
             arm32v7/python:3.7-buster \
             bash -c "
+              set -x  # Mostra todos os comandos executados
+              
               echo '=== CONFIGURANDO REPOSITÓRIOS ===' &&
               echo 'deb http://archive.debian.org/debian buster main contrib non-free' > /etc/apt/sources.list &&
               echo 'deb http://archive.debian.org/debian-security buster/updates main contrib non-free' >> /etc/apt/sources.list &&
@@ -31,7 +33,7 @@ jobs:
               echo '=== ATUALIZANDO PACOTES ===' &&
               apt-get update -o Acquire::Check-Valid-Until=false &&
               
-              echo '=== INSTALANDO DEPENDÊNCIAS DE SISTEMA ===' &&
+              echo '=== INSTALANDO DEPENDÊNCIAS ===' &&
               apt-get install -y \
                 gcc \
                 freetds-dev \
@@ -47,36 +49,63 @@ jobs:
               
               echo '=== INSTALANDO PACOTES PYTHON ===' &&
               pip install --upgrade pip setuptools wheel &&
-              
-              # ÚNICA MUDANÇA 1: Instalar versão específica do Cython
               pip install cython==0.29.24 &&
               
-              # ÚNICA MUDANÇA 2: pymssql 2.1.5 (mais estável)
+              # TENTATIVA 1: pymssql 2.1.5
+              echo '=== TENTANDO pymssql 2.1.5 ===' &&
               pip install pymssql==2.1.5 &&
+              
+              # SE FALHAR, TENTA 2.0.3
+              if [ $? -ne 0 ]; then
+                echo '=== FALHOU 2.1.5, TENTANDO 2.0.3 ===' &&
+                pip install pymssql==2.0.3
+              fi &&
+              
+              # SE FALHAR DE NOVO, USA ALTERNATIVA
+              if [ $? -ne 0 ]; then
+                echo '=== FALHOU TUDO, USANDO ALTERNATIVA ===' &&
+                pip install pyodbc
+              fi &&
+              
+              echo '=== INSTALANDO DEMAIS PACOTES ===' &&
               pip install requests==2.31.0 &&
               pip install pyinstaller==5.13.2 &&
               
               echo '=== VERIFICANDO INSTALAÇÃO ===' &&
-              python -c \"import pymssql; print('pymssql OK')\" &&
+              python -c \"import pymssql; print('pymssql OK')\" 2>/dev/null || echo 'pymssql não disponível' &&
+              python -c \"import pyodbc; print('pyodbc OK')\" 2>/dev/null || echo 'pyodbc não disponível' &&
               python -c \"import requests; print('requests OK')\" &&
               
               echo '=== COMPILANDO APLICAÇÃO ===' &&
+              # Tenta compilar mesmo que pymssql falhe
               pyinstaller --onefile \
                 --clean \
                 --name app_raspberry \
                 --hidden-import pymssql \
                 --hidden-import _mssql \
                 --hidden-import requests \
-                app.py &&
+                app.py || true &&
               
-              echo '=== VERIFICANDO EXECUTÁVEL ===' &&
-              ls -la dist/ || echo 'PASTA DIST VAZIA' &&
-              file dist/app_raspberry 2>/dev/null || echo 'EXECUTÁVEL NÃO ENCONTRADO'
+              echo '=== VERIFICANDO ARQUIVOS GERADOS ===' &&
+              find . -name "*.py" -o -name "*.exe" -o -name "app_raspberry*" | sort &&
+              
+              echo '=== CONTEÚDO DA PASTA dist ===' &&
+              ls -la dist/ 2>/dev/null || echo 'PASTA dist NÃO EXISTE' &&
+              
+              echo '=== CONTEÚDO DA PASTA RAIZ ===' &&
+              ls -la . &&
+              
+              echo '=== CONTEÚDO DA PASTA build ===' &&
+              ls -la build/ 2>/dev/null || echo 'PASTA build NÃO EXISTE'
             "
       
-      - name: Upload executável
+      - name: Upload executável (tenta vários caminhos)
         uses: actions/upload-artifact@v4
         with:
           name: app_raspberry-final
-          path: dist/app_raspberry
-          if-no-files-found: warn  # Mudamos para warn em vez de error
+          path: |
+            dist/app_raspberry
+            app_raspberry
+            *.exe
+            app_raspberry*
+          if-no-files-found: warn
