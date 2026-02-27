@@ -1,2 +1,0 @@
-pymssql==2.2.7
-pyinstaller==5.13.2
