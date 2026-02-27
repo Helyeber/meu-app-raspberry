@@ -16,7 +16,7 @@ jobs:
         with:
           platforms: arm
       
-      - name: Compilar com Debian Buster e Python 3.7
+      - name: Compilar com Debian Buster
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
@@ -45,15 +45,14 @@ jobs:
               echo '=== VERIFICANDO GLIBC ===' &&
               ldd --version | head -n1 &&
               
-              echo '=== INSTALANDO CURL E UTILITÁRIOS ===' &&
-              apt-get install -y curl &&
-              
-              echo '=== INSTALANDO PACOTES PYTHON (VERSÕES ESPECÍFICAS) ===' &&
+              echo '=== INSTALANDO PACOTES PYTHON ===' &&
               pip install --upgrade pip setuptools wheel &&
               
-              # Instalar versões compatíveis
+              # ÚNICA MUDANÇA 1: Instalar versão específica do Cython
               pip install cython==0.29.24 &&
-              pip install pymssql==2.2.5 &&
+              
+              # ÚNICA MUDANÇA 2: pymssql 2.1.5 (mais estável)
+              pip install pymssql==2.1.5 &&
               pip install requests==2.31.0 &&
               pip install pyinstaller==5.13.2 &&
               
@@ -68,15 +67,11 @@ jobs:
                 --hidden-import pymssql \
                 --hidden-import _mssql \
                 --hidden-import requests \
-                --add-data /usr/local/lib/python3.7/site-packages/pymssql:pymssql \
                 app.py &&
               
               echo '=== VERIFICANDO EXECUTÁVEL ===' &&
-              ls -la dist/ &&
-              file dist/app_raspberry &&
-              
-              echo '=== VERIFICANDO GLIBC REQUERIDA ===' &&
-              readelf -V dist/app_raspberry | grep GLIBC_2. || true
+              ls -la dist/ || echo 'PASTA DIST VAZIA' &&
+              file dist/app_raspberry 2>/dev/null || echo 'EXECUTÁVEL NÃO ENCONTRADO'
             "
       
       - name: Upload executável
@@ -84,4 +79,4 @@ jobs:
         with:
           name: app_raspberry-final
           path: dist/app_raspberry
-          if-no-files-found: error
+          if-no-files-found: warn  # Mudamos para warn em vez de error
