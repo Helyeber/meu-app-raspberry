@@ -9,59 +9,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Configurar QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm32v7
       
-      - name: Verificar configuração
-        run: |
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-      
-      - name: Compilar para ARMv7 (CORRIGIDO)
+      - name: Compilar com drivers alternativos
         run: |
           docker run --rm \
             --platform linux/arm/v7 \
             -v $PWD:/workspace \
             -w /workspace \
             arm32v7/python:3.9-slim \
-            /bin/bash -c "
-              echo '=== ATUALIZANDO REPOSITÓRIOS ===' &&
+            bash -c "
               apt-get update &&
+              apt-get install -y gcc &&  # Só precisa disso!
               
-              echo '=== INSTALANDO DEPENDÊNCIAS DE COMPILAÇÃO ===' &&
-              apt-get install -y \
-                gcc \
-                freetds-dev \
-                zlib1g-dev \
-                libssl-dev \
-                pkg-config \
-                make \
-                libffi-dev \
-                python3-dev &&
-              
-              echo '=== INSTALANDO PACOTES PYTHON ===' &&
               pip install --upgrade pip setuptools wheel &&
-              pip install pyinstaller pymssql &&
+              # Instalar drivers pure Python (sem dependências complicadas)
+              pip install pyinstaller pymysql mssql-cli &&
               
+              # Para SQL Server, podemos usar sqlalchemy + pymssql ou
+              # uma abordagem diferente
               echo '=== COMPILANDO APLICAÇÃO ===' &&
-              pyinstaller --onefile \
-                --name app_raspberry \
-                --clean \
-                app.py &&
-              
-              echo '=== VERIFICANDO ARQUIVO GERADO ===' &&
-              ls -la dist/ &&
-              file dist/app_raspberry
+              pyinstaller --onefile --name app_raspberry app.py
             "
       
-      - name: Upload do executável
+      - name: Upload
         uses: actions/upload-artifact@v4
-        if: success()
         with:
-          name: executavel-raspberry-armv7
+          name: executavel-raspberry
           path: dist/app_raspberry
-          retention-days: 5
